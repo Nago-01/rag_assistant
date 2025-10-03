@@ -11,7 +11,7 @@ env/
 venv/
 ENV/
 
-# IDE/Editor files
+# editor files
 .vscode/
 .idea/
 *.swp
@@ -29,7 +29,7 @@ Thumbs.db
 build/
 dist/
 
-# Data / cache folders (optional: if you don’t want to upload local data)
+# Data folders 
 outputs/
 data/
 chroma_db/
@@ -37,6 +37,4 @@ chroma_store/
 
 # Logs
 *.log
-
-# Jupyter Notebook checkpoints
 .ipynb_checkpoints/
