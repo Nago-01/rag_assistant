@@ -1,0 +1,42 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+.venv_new/
+env/
+venv/
+ENV/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+*.env
+
+# Build and packaging
+*.egg-info/
+build/
+dist/
+
+# Data / cache folders (optional: if you don’t want to upload local data)
+outputs/
+data/
+chroma_db/
+chroma_store/
+
+# Logs
+*.log
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
