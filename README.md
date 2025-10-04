@@ -129,4 +129,9 @@ Type questions, e.g. What are VAEs? (Based on the content of your provided publi
 
 
 
+## License
+MIT
+
+
+
 
