@@ -1,4 +1,4 @@
-## RAG Asistant - Augemented Publication QA Assistant
+# RAG Asistant - Augemented Publication QA Assistant
 An augmented retrieval-augmented QA assistant that answers users’ questions grounded in a provided publication. It combines a Chroma vectorstore (document chunks + embeddings), short-term SQL transcript history, and a long-term vector retriever to produce grounded answers from the publication.
 
 ## How it works: 
@@ -23,5 +23,17 @@ This project is a small RAG-style interactive assistant:
 - Save question + answer to SQL and to vector memory for semantic retrieval.
 
 This yields answers that are intended to be grounded in the publication.
+
+## Installation
+
+Open a terminal and cd to the rag_assistant folder (the one that contains the code/ directory).
+
+Create & activate a virtual environment:
+
+Unix / macOS
+```
+python -m venv .venv
+source .venv/bin/activate
+```
 
 
