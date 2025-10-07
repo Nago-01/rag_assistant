@@ -1,6 +1,8 @@
 import os
 import yaml
 from dotenv import load_dotenv
+from PyPDF2 import PdfReader
+from docx import Document
 from pathlib import Path
 from typing import Union, Optional
 
@@ -17,17 +19,35 @@ def load_publication(file_path = Path) -> str:
         FileNotFoundError: If the file does not exist.
         IOError: If there's an error reading the file.
     """
-
     # Check if file exists
     if not file_path.exists():
         raise FileNotFoundError(f"Publication file not found: {file_path}")
+    
+    # Determine file type by extension
+    suffix = file_path.suffix.lower()
 
-    # Read and return the file content
     try:
-        with open(file_path, "r", encoding="utf-8") as file:
-            return file.read()
-    except IOError as e:
-        raise IOError(f"Error reading publication file: {e}") from e
+        if suffix in [".md", ".txt"]:
+            # try UTF-8 first, then fallback to latin-1
+            try:
+                return file_path.read_text(encoding="utf-8").strip()
+            except UnicodeDecodeError:
+                return file_path.read_text(encoding="latin-1").strip()
+        
+        elif suffix == ".pdf":
+            reader = PdfReader(file_path)
+            return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        
+        elif suffix == ".docx":
+            doc = Document(file_path)
+            return "\n".join(para.text for para in doc.paragraphs if para.text.strip())
+        
+        else:
+            raise ValueError(f"Unsupported file type: {suffix}")
+    
+    except Exception as e:
+        raise IOError(f"Error loading publication file: {e}") from e
+
 
 
 def load_yaml_config(file_path: Union[str, Path]) -> dict:

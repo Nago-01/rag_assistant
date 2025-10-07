@@ -1,7 +1,6 @@
-import os
 from pathlib import Path
 
-# Root directory of your project
+# Root directory
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 # Environment file
