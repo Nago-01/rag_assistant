@@ -7,7 +7,7 @@ from typing import Union, Optional
 from .paths import PUBLICATION_FPATH, ENV_FPATH
 
 
-def load_publication():
+def load_publication(file_path = Path) -> str:
     """Loads the publication markdown file.
 
     Returns:
@@ -17,7 +17,6 @@ def load_publication():
         FileNotFoundError: If the file does not exist.
         IOError: If there's an error reading the file.
     """
-    file_path = Path(PUBLICATION_FPATH)
 
     # Check if file exists
     if not file_path.exists():

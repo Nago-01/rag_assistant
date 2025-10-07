@@ -14,7 +14,7 @@ from langchain.prompts import PromptTemplate
 
 # Imports for project root path handling
 sys.path.append(str(Path(__file__).parent.parent))
-from .paths import OUTPUTS_DIR, APP_CONFIG_FPATH
+from .paths import OUTPUTS_DIR, APP_CONFIG_FPATH, PUBLICATION_FPATH
 from .utils import load_env, save_text_to_file, load_publication
 
 # Path to YAML file
@@ -32,7 +32,8 @@ probe_patterns = config["probe_patterns"]
 
 
 # Extract publication
-publication_content = load_publication()
+for pub_path in PUBLICATION_FPATH:
+    publication_content = load_publication(pub_path)
 
 
 # SQLite helpers

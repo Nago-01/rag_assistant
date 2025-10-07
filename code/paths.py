@@ -1,19 +1,29 @@
 import os
 from pathlib import Path
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Root directory of your project
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
-ENV_FPATH = os.path.join(ROOT_DIR, ".env")
+# Environment file
+ENV_FPATH = ROOT_DIR / ".env"
 
-CODE_DIR = os.path.join(ROOT_DIR, "code")
+# Code and config paths
+CODE_DIR = ROOT_DIR / "code"
+APP_CONFIG_FPATH = CODE_DIR / "config" / "config.yaml"
+PROMPT_CONFIG_FPATH = CODE_DIR / "config" / "prompt_config.yaml"
 
-APP_CONFIG_FPATH = os.path.join(CODE_DIR, "config", "config.yaml")
-PROMPT_CONFIG_FPATH = os.path.join(CODE_DIR, "config", "prompt_config.yaml")
-
-BASE_DIR = Path(__file__).resolve().parent
-OUTPUTS_DIR = BASE_DIR / "outputs"
+# Output directory
+OUTPUTS_DIR = ROOT_DIR / "outputs"
 OUTPUTS_DIR.mkdir(exist_ok=True)
 
+# Data directory
+DATA_DIR = ROOT_DIR / "data"
 
-DATA_DIR = os.path.join(ROOT_DIR, "data")
-PUBLICATION_FPATH = os.path.join(DATA_DIR, "publication.md")
+# Get all publication files
+PUBLICATION_FPATH = list(DATA_DIR.glob("*.*"))
+
+# Filter to only common publication types
+PUBLICATION_FILES = [
+    f for f in PUBLICATION_FPATH
+    if f.suffix.lower() in [".md", ".txt", ".pdf", ".doc", ".docx"]
+]
