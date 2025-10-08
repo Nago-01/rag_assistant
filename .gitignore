@@ -40,3 +40,8 @@ chroma_store/
 # Logs
 *.log
 .ipynb_checkpoints/
+*.db
+*.sqlite3
+
+# Jupyter Notebook
+.ipynb_checkpoints/
