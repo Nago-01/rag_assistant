@@ -34,11 +34,11 @@ These yield answers that are intended to be grounded in the provided documents.
 ```
 rag_assistant/
 └───code/
-│   ├─ app.py              # main interactive assistant script
-│   ├─ db.py                      # load_publication, save_text_to_file, load_env, etc.
-│   ├─ .env                      # OUTPUTS_DIR, APP_CONFIG_FPATH
+│   ├─ app.py              # Main RAG assistant logic
+│   ├─ db.py               # Vector database wrapper (Chroma + SentenceTransformer)
+│   ├─ .env                # Environment variables (API keys, model configs)
 │   ├─ __init__.py
-└───data/
+└───data/                    # Folder containing input documents
     ├─ publication.md                # your provided markdown publication
     ├─ publication.pdf               # your provided pdf publication
     └─ publication.txt               # your provided text publication
