@@ -51,8 +51,8 @@ rag_assistant/
 
 ### Clone the repository
 ```
-git clone https://github.com/yourusername/rag-qa-assistant.git
-cd rag-qa-assistant
+git clone https://github.com/Nago-01/rag_assistant.git
+cd rag_assistant
 ```
 
 
@@ -118,7 +118,7 @@ data/
 ### Running the Assistant
 After setup, run as a module:
 ```
-python -m <root_directory>.<code_folder>.app
+python -m code.app
 ```
 
 Example Session:
