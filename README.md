@@ -34,16 +34,15 @@ These yield answers that are intended to be grounded in the provided documents.
 ```
 rag_assistant/
 └───code/
-│   ├─ qa_rag_assist.py              # main interactive assistant script
-│   ├─ utils.py                      # load_publication, save_text_to_file, load_env, etc.
-│   ├─ paths.py                      # OUTPUTS_DIR, APP_CONFIG_FPATH
-│   ├───config
-│   │   ├─ config_prompts.yaml       # prompts, configurations and probe patterns
-│   │   └─ app_config.yaml           # app configuration for LLM, persist_dir, db path
-│   ├───outputs                      # transcripts, DB files, created at runtime
+│   ├─ app.py              # main interactive assistant script
+│   ├─ db.py                      # load_publication, save_text_to_file, load_env, etc.
+│   ├─ .env                      # OUTPUTS_DIR, APP_CONFIG_FPATH
+│   ├─ __init__.py
 └───data/
     ├─ publication.md                # your provided markdown publication
+    ├─ publication.pdf               # your provided pdf publication
     └─ publication.txt               # your provided text publication
+
 ```
 
 
@@ -86,7 +85,6 @@ pip install -r requirements.txt
 ### Set up your .env file
 Create a .env file in the project root directory and add your API keys:
 ```
-# Example .env
 
 # Groq API (preferred)
 GROQ_API_KEY=your_groq_api_key
