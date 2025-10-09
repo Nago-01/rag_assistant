@@ -105,6 +105,7 @@ If you get import errors, please ensure you installed the packages that provide 
 
 ### Adding Documents
 Place your documents in the data/ folder (supported formats: .txt, .md, .pdf, .docx).
+
 Example:
 ```
 data/
@@ -115,7 +116,7 @@ data/
 
 
 ### Running the Assistant
-After setup, run as module:
+After setup, run as a module:
 ```
 python -m <root_directory>.<code_folder>.app
 ```
