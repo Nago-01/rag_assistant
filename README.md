@@ -5,11 +5,11 @@ A RAG-based QA assistant that can read and understand contents of documents from
 
 ## How it works: 
 
-- The assistant loads and processes the provided local text documents (.txt, .md, .pdf, .docx)
+- The assistant loads and processes the provided local text documents (`.txt`, `.md`, `.pdf`, `.docx`)
 
 - Each of the text documents are split into chunks with RecursiveCharacterTextSplitter.
 
-- Chunks are embedded using HuggingFace all-MiniLM-L6-v2 and stored as vectors in ChromaDB for fast semantic retrieval.
+- Chunks are embedded using HuggingFace `all-MiniLM-L6-v2` and stored as vectors in ChromaDB for fast semantic retrieval.
 
 - Integrates multiple LLM providers (Groq or Gemini)
 
@@ -24,7 +24,7 @@ These yield answers that are intended to be grounded in the provided documents.
 
 - git - if you will choose to publish to Github.
 
-- A Groq or Gemini API key. If you use ChatGroq LLM: set GROQ_API_KEY in env or .env.
+- A Groq or Gemini API key. If you use ChatGroq LLM: set GROQ_API_KEY in env or `.env`.
 
 - You will also need the Python packages used in the code (see Installation)
 
@@ -59,7 +59,7 @@ cd rag-qa-assistant
 
 ### Create & activate a virtual environment
 
-Open a terminal and cd to the rag_assistant folder (the one that contains the code/ directory)
+Open a terminal and cd to the `rag_assistant/` folder (the one that contains the code/ directory)
 
 Unix / macOS
 ```
@@ -83,7 +83,7 @@ pip install -r requirements.txt
 
 
 ### Set up your .env file
-Create a .env file in the project root directory and add your API keys:
+Create a `.env` file in the project root directory and add your API keys:
 ```
 
 # Groq API (preferred)
@@ -104,14 +104,14 @@ If you get import errors, please ensure you installed the packages that provide 
 
 
 ### Adding Documents
-Place your documents in the data/ folder (supported formats: .txt, .md, .pdf, .docx).
+Place your documents in the data/ folder (supported formats: `.txt`, `.md`, `.pdf`, `.docx`).
 
 Example:
 ```
 data/
-├── research_paper.pdf
-├── meeting_notes.docx
-└── summary.txt
+├── publication.pdf
+├── publication.docx
+└── publication.txt
 ```
 
 
