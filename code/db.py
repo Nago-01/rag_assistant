@@ -27,7 +27,7 @@ class VectorDB:
         self.client = chromadb.PersistentClient(path="./chroma_db")
 
         # Load embedding model
-        print(f"Loading embedding model: {self.embedding_model_name}")
+        # print(f"Loading embedding model: {self.embedding_model_name}")
         self.embedding_model = SentenceTransformer(self.embedding_model_name)
 
         # Get or create collection
@@ -69,7 +69,7 @@ class VectorDB:
         Args:
             documents: List of documents
         """
-        print(f"Processing {len(documents)} documents...")
+        # print(f"Processing {len(documents)} documents...")
 
         for i, doc in enumerate(documents):
             text = doc.get("content", "")
@@ -91,7 +91,7 @@ class VectorDB:
                 embeddings = embeddings.tolist() if not isinstance(embeddings, list) else embeddings,
                 ids=chunk_ids
             )
-            print(f"Added {len(chunks)} chunks from document {i+1}/{len(documents)}")
+            # print(f"Added {len(chunks)} chunks from document {i+1}/{len(documents)}")
         
         print("All documents processed and added to the vector database.")
 

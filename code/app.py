@@ -113,21 +113,20 @@ class QAAssistant:
         Try Groq first, then Google Gemini.
         """
         # Check for Groq API key
-        if os.getenv("GROQ_API_KEY"):
-            model_name = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+        if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+            model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+            print(f"Using Google Gemini model: {model_name}")
+            return ChatGoogleGenerativeAI(
+                google_api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
+                model=model_name,
+                temperature=0.0
+            )
+        elif os.getenv("GROQ_API_KEY"):
+            model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
             print(f"Using Groq model: {model_name}")
             return ChatGroq(
                 api_key=os.getenv("GROQ_API_KEY"),
                 model=model_name,
-                temperature=0.0
-            )
-        # Check for Google Gemini API key
-        elif os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
-            model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-            print(f"Using Google Gemini model: {model_name}")
-            return ChatGoogleGenerativeAI(
-                google_api_key=os.getenv("GEMINI_API_KEY"),
-                model_name=model_name,
                 temperature=0.0
             )
         else:
@@ -172,7 +171,7 @@ def main():
     """Main function to demonstrate the QA assistant."""
     try:
         # Initialize the QA assistant
-        print("Initializing the QA Assistant...")
+        # print("Initializing the QA Assistant...")
         assistant = QAAssistant()
 
         # Load sample documents
