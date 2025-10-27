@@ -188,7 +188,7 @@ def _initialize_llm():
 
     if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
         model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
-        print(f"Using Google Gemini model: {model_name}")
+        # print(f"Using Google Gemini model: {model_name}")
         return ChatGoogleGenerativeAI(
             google_api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
             model=model_name,
@@ -196,7 +196,7 @@ def _initialize_llm():
         )
     elif os.getenv("GROQ_API_KEY"):
         model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        print(f"Using Groq model: {model_name}")
+        # print(f"Using Groq model: {model_name}")
         return ChatGroq(
             api_key=os.getenv("GROQ_API_KEY"),
             model=model_name,
@@ -275,7 +275,7 @@ def tools_node(state: AgentState):
         
         if tool:
             print(f"\nExecuting {tool_name}")
-            print(f"   Query: {tool_call['args'].get('query', tool_call['args'].get('expression', ''))}")
+            print(f"Query: {tool_call['args'].get('query', tool_call['args'].get('expression', ''))}")
             
             try:
                 result = tool.invoke(tool_call["args"])
@@ -319,11 +319,11 @@ def should_continue(state: AgentState) -> Literal["tools", "end"]:
     
     # If LLM made tool calls, execute them
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        print("\n🤔 Agent is selecting tools...")
+        print("\nAgent is selecting tools...")
         return "tools"
     
     # Otherwise, we're done - agent has provided final answer
-    print("\n✅ Agent is ready with answer")
+    print("\nAgent is ready with answer")
     return "end"
 
 # Defining the complete agentic RAG workflow
@@ -372,9 +372,9 @@ def create_agentic_rag():
 # Main
 def main():
     """Main function to run the agentic RAG assistant"""
-    print("=" * 60)
+    print("=" * 50)
     print("🤖 Agentic RAG Assistant with LangGraph")
-    print("=" * 60)
+    print("=" * 50)
     print("\nInitializing agent...")
     
     try:
@@ -414,7 +414,7 @@ def main():
             }
             
             print("\n🔄 Processing...")
-            print("-" * 40)
+            print("-" * 25)
             
             try:
                 # Invoke the agent with conversation history
