@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, Tool
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_tavily import TavilySearch
+from tavily import TavilyClient
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 # Import your existing RAG components
@@ -26,6 +26,10 @@ from .app import QAAssistant, load_publication
 
 # Load environment variables
 load_dotenv()
+
+# Supressing gRPC ALTS warnings
+os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["GLOG_minloglevel"] = "2"
 
 
 # Defining the state structure for the agent                        
@@ -107,23 +111,46 @@ def web_search(query: str) -> str:
         return "Web search is not available. Please set TAVILY_API_KEY in .env file."
     
     try:
-        # Try to use the new langchain-tavily package
-        try:
-            search_tool = TavilySearch(max_results=3)
-            results = search_tool.invoke({"query": query})
-        except ImportError:
-            # Fall back to old package if new one not installed
-            search_tool = TavilySearchResults(max_results=3)
-            results = search_tool.invoke({"query": query})
+        # Initialize Tavily search tool
+        tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+
+        # Execute the search
+        search_tool = tavily_client.search(
+            query=query,
+            max_results=3,
+            include_answer=False,
+            include_raw_content=False,
+            search_depth="advanced"
+        )
+
+        # Perform the search
+        results = search_tool["results"]
         
-        # Format results nicely
-        formatted = []
-        for i, result in enumerate(results, 1):
-            formatted.append(f"{i}. {result.get('content', '')}\nSource: {result.get('url', '')}")
-        
-        return "\n\n".join(formatted)
+        # Handling different result formats
+        if isinstance(results, str):
+            # if results come as a single string already
+            return results
+        elif isinstance(results, list):
+            # if it's a list of dictionaries
+            formatted = []
+            for i, result in enumerate(results, 1):
+                if isinstance(result, dict):
+                    content = result.get("content", result.get("snippet", ""))
+                    url = result.get("url", "")
+                    formatted.append(f"{i}. {content}\nSource: {url}")
+                else:
+                    formatted.append(f"{i}. {str(result)}")
+            return "\n\n".join(formatted) if formatted else "No results found."
+        elif isinstance(results, dict):
+            # if it's a single dictionary
+            content = results.get("content", results.get("snippet", ""))
+            url = results.get("url", "")
+            return f"{content}\nSource: {url}"
+        else:
+            # If it's unknown format, convert to string
+            return str(results)
     except Exception as e:
-        return f"Web search error: {str(e)}"
+        return f"Error during web search: {str(e)}"
 
 
 @tool
