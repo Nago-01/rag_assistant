@@ -19,7 +19,7 @@ from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from tavily import TavilyClient
-from langchain_community.tools.tavily_search import TavilySearchResults
+
 
 # Import your existing RAG components
 from .app import QAAssistant, load_publication
