@@ -1,14 +1,5 @@
-"""
-Agentic RAG Assistant using LangGraph
-This module transforms the basic RAG assistant into an agentic system that can:
-- Decide when to use RAG vs other tools
-- Use web search for current information
-- Perform calculations
-- Maintain conversation memory
-"""
-
 import os
-from typing import Annotated, Literal
+from typing import Annotated, Literal, List, Dict, Any
 from typing_extensions import TypedDict
 from dotenv import load_dotenv
 
@@ -19,7 +10,13 @@ from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from tavily import TavilyClient
-
+from pathlib import Path
+from .export_utils import (
+    generate_latex_bibliography,
+    generate_word_bibliography,
+    generate_markdown_bibliography,
+    generate_literature_review_document
+)
 
 # Import your existing RAG components
 from .app import QAAssistant, load_publication
@@ -38,6 +35,7 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
 
 
+
 # Defining tools 
 # Create a global RAG assistant 
 _rag_assistant = None
@@ -48,10 +46,36 @@ def initialize_rag():
     if _rag_assistant is None:
         print("\nInitializing RAG knowledge base...")
         _rag_assistant = QAAssistant()
-        docs = load_publication()
+        
+        # Trying multiple paths
+        possible_paths = [
+            Path("./data"),
+            Path(__file__).resolve().parent/"data",
+            Path(__file__).resolve().parent.parent/"data"
+        ]
+
+        docs = None
+        for data_path in possible_paths:
+            if data_path.exists():
+                try:
+                    docs = load_publication(pub_dir=data_path)
+                    break
+                except Exception as e:
+                    print(f"Error loading from {data_path}: {e}")
+                    continue
+
+        if docs is None:
+            raise FileNotFoundError(
+                f"Could not find data folder. Tried:\n" +
+                "\n".join(f"  - {p.absolute()}" for p in possible_paths)
+            )
+        
         _rag_assistant.add_doc(docs)
-        print(f"✓ Loaded {len(docs)} documents into knowledge base\n")
+        print(f"Loaded {len(docs)} documents into knowledge base.\n")
+
     return _rag_assistant
+
+        
 
 
 @tool
@@ -59,20 +83,29 @@ def rag_search(query: str) -> str:
     """
     Search the internal document knowledge base for information.
     
-    **ALWAYS USE THIS FIRST** for any factual questions that could be answered 
-    from documents about topics like: medical conditions, research papers, 
-    company information, or any content in the uploaded documents.
+    **ALWAYS USE THIS FIRST** for any factual questions about provided documents.
+    Returns results with source, page number and section information.
     
     Args:
-        query: The search query to find relevant information in documents
+        query: The search query 
         
     Returns:
-        Relevant document excerpts that answer the query
+        Relevant document excerpts with full citations
     """
     rag = initialize_rag()
-    
+
+
+    # Expand short queries for better results
+    if len(query.split()) <= 2:
+        # For acronyms or short terms, expand the query
+        expanded_query = f"{query} definition meaning explanation what is"
+    else:
+        expanded_query = query
+
+
     # Get search results with metadata
-    results = rag.db.search(query, n_results=5)
+    results = rag.db.search(expanded_query, n_results=5, use_reranking=True)
+    
     
     # Check if we got any results
     if not results["documents"]:
@@ -80,15 +113,382 @@ def rag_search(query: str) -> str:
     
     # Format the results with context
     formatted_results = []
-    for i, (doc, metadata, distance) in enumerate(zip(
+    for i, (doc, metadata, citation, distance) in enumerate(zip(
         results["documents"], 
-        results["metadatas"], 
+        results["metadatas"],
+        results["citations"], 
         results["distances"]
     ), 1):
+        # truncating long documents for readability
+        doc_preview = doc[:500] + "..." if len(doc) > 500 else doc
+
+        
         source = metadata.get("source", "Unknown")
-        formatted_results.append(f"[Source: {source}]\n{doc}")
+        formatted_results.append(
+            f"Source: {source}\n{doc}\n"
+            f"**Result {i}** (Relevance: {distance:.3f})\n"
+            f"Citation: {citation}\n"
+            f"Content: {doc_preview}\n"
+        )
     
     return "\n\n---\n\n".join(formatted_results)
+
+@tool
+def compare_documents(doc1_name: str, doc2_name: str, topic: str) -> str:
+    """
+    Compare information from two specific documents on a given topic.
+    
+    Use this when the user explicitly asks to compare two documents, 
+    such as "Compare AMR and Dysmenorrhea papers" or "what's the difference
+    between document A and document B on topic Y?"
+
+    Args:
+        doc1_name: Name of first document (e.g., "amr.pdf")
+        doc2_name: Name of second document (e.g., "dysmenorrhea.pdf")
+        topic: The topic/aspect to compare (e.g., "treatment", "causes")
+
+    Returns:
+        Side-by-side comaprison of the two documents
+    """
+    rag = initialize_rag()
+
+    try: 
+        # Search for topic in both documents
+        query = f"{topic}"
+        results = rag.db.search(query, n_results=10, use_reranking=True)
+
+        # Filter results by document
+        doc1_results = []
+        doc2_results = []
+
+        for doc, metadata, citation in zip(
+            results["documents"], 
+            results["metadatas"],
+            results["citations"]
+        ):
+            source = metadata.get("source", "").lower()
+
+            if doc1_name.lower() in source:
+                doc1_results.append({
+                    "content": doc[:300] + "..." if len(doc) > 300 else doc,
+                    "citation": citation
+                })
+            elif doc2_name.lower() in source:
+                doc2_results.append({
+                    "content": doc[:300] + "..." if len(doc) > 300 else doc,
+                    "citation": citation
+                })
+        
+
+        # Format comparison output
+        comparison = f"**COMPARISON: {doc1_name} vs {doc2_name} on '{topic}'**\n\n"
+
+        comparison += f"📘 **{doc1_name}:**\n"
+        if doc1_results:
+            for i, result in enumerate(doc1_results[:3], 1):
+                comparison += f"{i}. {result['citation']}\n{result['content']}\n\n"
+        else:
+            comparison += f"No relevant information found about '{topic}'\n\n"
+
+        comparison += f"📘 **{doc2_name}:**\n"
+        if doc2_results:
+            for i, result in enumerate(doc2_results[:3], 1):
+                comparison += f"{i}. {result['citation']}\n{result['content']}\n\n"
+        else:
+            comparison += f"No relevant information found about '{topic}'\n\n"
+        
+        return comparison
+    
+    except Exception as e:
+        return f"Error comparing documents: {str(e)}"
+    
+
+@tool
+def generate_bibliography() -> str:
+    """
+    Generate a formatted bibliography of all documents in the knowledge base.
+
+    Use this when the user asks for:
+    - "List of documents"
+    - "Show me the bibliography"
+    - "What sources do you have?"
+    - "Generate a reference list"
+
+    Returns:
+        Formatted bibliography with document metadata
+    """
+
+    rag = initialize_rag()
+
+    try:
+        # Get all required documents from the vector database
+        all_results = rag.db.collection.get()
+
+        # Extracting unique documents with metadata
+        seen_sources = set()
+        bibliography = []
+
+        for metadata in all_results.get("metadatas", []):
+            source = metadata.get("source")
+
+            if source and source not in seen_sources:
+                seen_sources.add(source)
+
+                # Create bibliography entry
+                entry = {
+                    "source": source,
+                    "title": metadata.get("title", "Unknown Title"),
+                    "author": metadata.get("author", "Unknown Author"),
+                    "page_count": metadata.get("page_count", "N/A"),
+                    "type": metadata.get("type", "N/A"),
+                    "date": metadata.get("creation_date", metadata.get("date_from_filename", "N/A"))
+                }
+                bibliography.append(entry)
+        
+        # Format bibliography
+        output = "BIBLIOGRAPHY\n"
+        output += "="*50 + "\n\n"
+
+        for i, entry in enumerate(bibliography, 1):
+            output += f"{i}. **{entry['title']}**\n"
+            output += f"    Author: {entry['author']}\n"
+            output += f"    Source: {entry['source']}\n"
+            output += f"    Type: {entry['type'].upper()}\n"
+            output += f"    Pages: {entry['page_count']}\n\n"
+
+            if entry['date'] != "N/A":
+                output += f"    Date: {entry['date']}\n"
+
+            output += "\n"
+
+        output += "="*50 + "\n"
+        output += f"**Total Documents: {len(bibliography)}**\n"
+
+        return output
+    except Exception as e:
+        return f"Error generating bibliography: {str(e)}"
+
+
+@tool
+def generate_literature_review(topic: str, max_sources: int = 10) -> str:
+    """
+    Generate a structured academic literature review on a specific topic.
+
+    Use when user asks to:
+        - "Write a literature review on X"
+        - "Summarize research on X"
+        - "What does the literature say about X?"
+
+    Args:
+        topic: The research topic
+        max_sources: Maximum number of sources (default: 10)
+
+    Returns:
+        Formatted literature review with citations
+    """
+    rag = initialize_rag()
+
+    try:
+        # Search for relevant content
+        results = rag.db.search(topic, n_results=max_sources, use_reranking=True)
+
+        if not results["documents"]:
+            return f"No literature found on topic '{topic}'."
+        
+        # Organize by document source
+        docs_content = {}
+        for doc, metadata, citation in zip(
+            results["documents"], 
+            results["metadatas"],
+            results["citations"]
+        ):
+            source = metadata.get("source", "Unknown")
+            if source not in docs_content:
+                docs_content[source] = {
+                    "title": metadata.get("title", source),
+                    "author": metadata.get("author", "Unknown Author"),
+                    "excerpts": [],
+                    "citations": []
+                }
+            docs_content[source]["excerpts"].append(doc[:500])
+            docs_content[source]["citations"].append(citation)
+
+        # Generate structured review
+        review = f"# Literature Review: {topic}\n\n"
+        review += f"**Documents Analyzed:** {len(docs_content)}\n\n"
+        review += "---\n\n"
+
+        # Introduction
+        review += "## Overview\n\n"
+        review += f"This review synthesizes findings from {len(docs_content)} documents "
+        review += f"related to {topic}. The following sections present key findings from each source.\n\n"
+        review += "---\n\n"
+
+        # Document-by-document review
+        for i, (source, content) in enumerate(docs_content.items(), 1):
+            review += f"## {i}. {content['title']}\n\n"
+            review += f"**Author:** {content['author']}\n"
+            review += f"**Source:** {source}\n\n"
+
+            # Add key excerpts
+            review += "**Key Findings:**\n\n"
+            for j, excerpt in enumerate(content['excerpts'][:3], 1):
+                review += f"{j}. {excerpt}...\n\n"
+
+            # Add citation
+            review += f"**Citations:** {', '.join(set(content['citations'][:2]))}\n\n"
+            review += "---\n\n"
+
+        # Synthesis section
+        review += "## Synthesis\n\n"
+        review += f"Across the {len(docs_content)} reviewed sources, several key themes emerges "
+        review += f"regarding {topic}. The literature provides comprehensive insights into "
+        review += "various aspects of the topic, offering both theoritical frameworks and practical applications.\n\n"
+
+
+        # References
+        review += "## References\n\n"
+        all_citations = []
+        for content in docs_content.values():
+            all_citations.extend(content['citations'])
+
+        unique_citations = list(set(all_citations))
+        for i, citation in enumerate(unique_citations, 1):
+            review += f"{i}. {citation}\n"
+
+        return review
+    except Exception as e:
+        return f"Error generating literature review: {str(e)}"
+    
+
+
+@tool
+def export_bibliography(format: str = "word") -> str:
+    """
+    Export bibliography in specified format (word, latex, markdown).
+
+    Use when user asks to:
+    - "Export bibliography"
+    - "Generate LaTex bibliography"
+    - "Save references as markdown"
+
+    Args:
+        format: Export format - 'word', 'latex', or 'markdown' (default: 'word')
+
+    Returns:
+        Path to the exported file
+    """
+    rag = initialize_rag()
+
+    try:
+        # Get all documents
+        all_results = rag.db.collection.get()
+
+        # Extract unique documents
+        seen_sources = set()
+        bibliography = []
+
+        for metadata in all_results.get("metadatas", []):
+            source = metadata.get("source")
+            if source and source not in seen_sources:
+                seen_sources.add(source)
+                bibliography.append({
+                    "source": source,
+                    "title": metadata.get("title", "Unknown Title"),
+                    "author": metadata.get("author", "Unknown Author"),
+                    "page_count": metadata.get("page_count", "N/A"),
+                    "type": metadata.get("type", "Unknown"),
+                    "date": metadata.get("creation_date", "n.d.")
+                })
+
+        
+        # Sort by source
+        bibliography.sort(key=lambda x: x["source"])
+
+        # Export based on format
+        if format.lower() == "latex":
+            file_path = generate_latex_bibliography(bibliography)
+            return f"Bibliography exported to LaTex: {file_path}"
+        
+        elif format.lower() == "markdown" or format.lower() == "md":
+            file_path = generate_markdown_bibliography(bibliography)
+            return f"Bibliography exported to Markdown: {file_path}"
+        
+        else: # Default to word
+            file_path = generate_word_bibliography(bibliography)
+            return f"Bibliography exported to Word: {file_path}"
+    except Exception as e:
+        return f"Error exporting bibliography: {str(e)}"
+    
+
+@tool
+def export_literature_review(topic: str, format: str = "word") -> str:
+    """ 
+    Generate and export a complete literature review document.
+    
+    Use when user asks to:
+    - "Export literature review on X as Word"
+    - "Generate LaTex review on X"
+    - "Save review about X as PDF"
+
+    Args:
+        topic: The research topic
+        format: Export format - 'word', 'latex', or 'markdown' (default: 'word')
+    
+    Returns:
+        Path to the exported document
+    """
+    rag = initialize_rag()
+
+    try:
+        # Search for content
+        results = rag.db.search(topic, n_results=10, use_reranking=True)
+
+        if not results.get("documents"):
+            return f"No literature found on the topic: {topic}"
+        
+        # Organize content by source
+        sections = []
+        docs_content = {}
+
+        for doc, metadata, citation in zip(
+            results.get("documents", []),
+            results.get("metadatas", []),
+            results.get("citations", [])
+        ):
+            if not isinstance(metadata, dict):
+                continue
+            source = metadata.get("source", "Unknown")
+            if source not in docs_content:
+                docs_content[source] = {
+                    "source": source,
+                    "content": [],
+                    "citations": []
+                }
+            docs_content[source]["content"].append(doc)
+            docs_content[source]["citations"].append(citation)
+
+        # Format sections
+        for source, data in docs_content.items():
+            combined_content = "\n\n".join(data["content"][:3])
+            sections.append({
+                "source": data["source"],
+                "content": combined_content,
+                "citations": list(set(data["citations"]))
+            })
+
+        # Generate document
+        file_path = generate_literature_review_document(
+            topic=topic,
+            sections=sections,
+            format=format.lower()
+            )
+        
+        return f"Literature review exported to {format.upper()}: {file_path}"
+    
+    except Exception as e:
+        return f"Error generating literature review: {str(e)}"                           
+
 
 
 @tool
@@ -177,6 +577,11 @@ def get_tools():
     """Return all available tools for the agent"""
     return [
         rag_search,
+        compare_documents,
+        generate_bibliography,
+        generate_literature_review,
+        export_bibliography,
+        export_literature_review,
         web_search,
         calculator
     ]
@@ -212,12 +617,6 @@ def _initialize_llm():
 def llm_node(state: AgentState):
     """
     The agent's brain - decides whether to use tools or respond directly.
-    
-    This node:
-    1. Receives the current conversation state
-    2. Analyzes what the user is asking
-    3. Decides if it needs tools (RAG, web search, calculator)
-    4. Either calls tools OR provides final answer
     """
     llm = _initialize_llm()
     tools = get_tools()
@@ -232,19 +631,20 @@ def llm_node(state: AgentState):
 
         **TOOL PRIORITY:**
         1. For ANY factual question, ALWAYS use rag_search FIRST
-        2. Only use web_search if rag_search explicitly returns "No relevant information found"
-        3. Use calculator for any mathematical computations
+        2. For comparing documents, use compare_documents
+        3. For listing sources, use generate_bibliography
+        4. For real-time or recent info, use web_search
+        5. For math, use calculator
 
-        **CONVERSATION CONTEXT:**
-        - You have full access to the conversation history
-        - When user says "it", "that", "this" - refer to the previous topic discussed
-        - Maintain context across multiple turns
+        **SEARCH OPTIMIZATION:**
+        - For acronyms/short terms (like "AMR), expand the query (e.g., "AMR antimicrobial resistance")
+        - For better results, add context (e.g., "in healthcare", "treatment options")
+        - Always check if results match the intended document
 
-        **RESPONSE GUIDELINES:**
-        - Base ALL answers on tool results ONLY
-        - If rag_search finds information, use it - don't search the web
-        - Be concise and direct
-        - If information is insufficient, clearly state what's missing
+        **CITATION RULES**
+        - ALWAYS cite page numbers and sources in your answer
+        - Format: "According to [Source: amr.pdf, Page: 5], ..."
+        - When comparing, clearly state differences and similarities
 
         Remember: TRY RAG FIRST BEFORE WEB!""")
         messages = [system_msg] + messages
@@ -256,11 +656,6 @@ def llm_node(state: AgentState):
 def tools_node(state: AgentState):
     """
     The agent's hands - executes the tools the agent requested.
-    
-    This node:
-    1. Gets the tool calls from the LLM's last message
-    2. Executes each tool with the provided arguments
-    3. Returns results back to the agent
     """
     tools = get_tools()
     tool_registry = {tool.name: tool for tool in tools}
@@ -275,14 +670,15 @@ def tools_node(state: AgentState):
         
         if tool:
             print(f"\nExecuting {tool_name}")
-            print(f"Query: {tool_call['args'].get('query', tool_call['args'].get('expression', ''))}")
+            args_preview = str(tool_call["args"])[:100]
+            print(f"   Args: {args_preview}")
             
             try:
                 result = tool.invoke(tool_call["args"])
                 
                 # Show preview of result
-                result_preview = str(result)[:150] + "..." if len(str(result)) > 150 else str(result)
-                print(f"   ✓ Preview: {result_preview}")
+                result_preview = str(result)[:200] + "..." if len(str(result)) > 200 else str(result)
+                print(f"    {result_preview}")
                 
                 tool_messages.append(ToolMessage(
                     content=str(result),
@@ -328,20 +724,7 @@ def should_continue(state: AgentState) -> Literal["tools", "end"]:
 
 # Defining the complete agentic RAG workflow
 def create_agentic_rag():
-    """
-    Build the complete agentic RAG workflow.
-    
-    The graph structure:
-    START → [LLM] → Decision?
-                ↑      ↓
-                |   Use tools?
-                |      ↓
-                └── [Tools]
-                
-            No tools needed?
-                ↓
-              END
-    """
+    """Build the complete agentic RAG workflow"""
     # Create the graph
     graph = StateGraph(AgentState)
     

@@ -1,4 +1,4 @@
-import os
+import os, re, traceback
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from pathlib import Path
@@ -6,64 +6,218 @@ from PyPDF2 import PdfReader
 from docx import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from .db import VectorDB
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
+from datetime import datetime
+from .db import VectorDB
 
 
 # Load environment variables
 load_dotenv()
 
-# Load documents
-def load_publication(pub_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
-    """Loads documents.
+def extract_pdf_metadata(file_path: Path) -> Dict[str, Any]:
+    """
+    Extract rich metadata from PDF files.
 
     Returns:
-        Sample documents as dictionaries.
+        Dictionary with title, author, date, page_count, etc.
     """
-    path = Path(pub_dir) if pub_dir else Path(__file__).resolve().parent.parent / "data"
+    reader = PdfReader(file_path)
+    metadata = {}
+
+    # Extract PyPDF2 metadata
+    pdf_info = reader.metadata
+    if pdf_info:
+        metadata["title"] = pdf_info.get("/Title", file_path.stem)
+        metadata["author"] = pdf_info.get("/Author", "Unknown")
+        metadata["creation_date"] = pdf_info.get("/CreationDate", "Unknown")
+        metadata["subject"] = pdf_info.get("/Subject", " ")
+    else:
+        metadata["title"] = file_path.stem
+        metadata["author"] = "Unknown"
+
+    # Page count
+    metadata["page_count"] = len(reader.pages)
+
+    # Extracting date from filename if possible
+    date_match = re.search(r'(\d{4})-?(\d{2})?-?(\d{2})?', file_path.name)
+    if date_match:
+        metadata["date_from_filename"] = date_match.group(0)
+
+    return metadata
+
+
+def extract_docx_metadata(file_path: Path) -> Dict[str, Any]:
+    """Extract metadata from DOCX files."""
+    doc = Document(file_path)
+    core_props = doc.core_properties
+
+    metadata = {
+        "title": core_props.title or file_path.stem,
+        "author": core_props.author or "Unknown",
+        "creation_date": str(core_props.created) if core_props.created else "Unknown",
+        "modified_date": str(core_props.modified) if core_props.modified else "Unknown",
+        "subject": core_props.subject or "",
+        "page_count": len(doc.sections) 
+    }
+
+    return metadata
+
+
+def extract_text_with_page_numbers(file_path: Path, ext: str) -> List[Dict[str, Any]]:
+    """
+    Extract text from documents while preserving page numbers.
+
+    Returns:
+        List of dictionaries with 'content', 'page_number' and 'section'
+    """
+    chunks = []
+
+    if ext == ".pdf":
+        reader = PdfReader(file_path)
+        for page_num, page in enumerate(reader.pages, start=1):
+            text = page.extract_text() or ""
+            if text.strip():
+                chunks.append({
+                    "content": text.strip(),
+                    "page_number": page_num,
+                    "section": f"Page {page_num}"
+                })
+
+    elif ext == ".docx":
+        doc = Document(file_path)
+        current_section = "Introduction"
+        page_num = 1
+
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                continue
+
+            # Detecting section headers
+            if para.style.name.startswith("Heading"):
+                current_section = text
+
+            chunks.append({
+                "content": text,
+                "page_number": page_num,
+                "section": current_section
+
+            })
+
+            # Rough page estimation
+            if len(text) > 500:
+                page_num += 1
+
+    elif ext in (".txt", ".md"):
+        text = file_path.read_text(encoding="utf-8")
+        chunks.append({
+            "content": text.strip(),
+            "page_number": 1,
+            "section": "Full Documentation"
+        })
+
+    return chunks
+
+
+# Load documents
+def load_publication(pub_dir: Optional[Path] = None) -> List[Dict[str, Any]]:
+    """Loads documents with enhanced metadata extraction.
+
+    Returns:
+        List of documents as dictionaries with rich metadata.
+    """
+    # Determine path with multiple checks
+    if pub_dir:
+        path = Path(pub_dir)
+    else:
+        # Trying multiple possible paths
+        possible_paths = [
+            Path("./data"),
+            Path(__file__).resolve().parent / "data",
+            Path(__file__).resolve().parent.parent / "data",
+        ]
+
+        path = None
+        for p in possible_paths:
+            if p.exists():
+                path = p
+                print(f"Found data folder at: {path}")
+                break
+
+        if path is None:
+            error_msg = "Data folder not found. Tried:\n" + "\n".join(f"  - {p.absolute()}" for p in possible_paths)
+            raise FileNotFoundError(error_msg)
+
     if not path.exists():
         raise FileNotFoundError(f"Data folder not found: {path}")
     
     results = []
+
     try:
-        # Handle as a single file
         if path.is_file():
             files = [path]
         else:
-            # Handle as a folder containing multiple files and arrange in alphanumeric order
-            files = sorted([f for f in path.iterdir() if f.suffix.lower() in (".md", ".txt", ".pdf", ".docx")])
-        
+            # Handle folder containing multiple files
+            all_files = list(path.iterdir())
+            files = sorted([f for f in all_files if f.suffix.lower() in (".md", ".txt", ".pdf", ".docx")])
+
         if not files:
             raise FileNotFoundError(f"No supported files found in: {path}")
         
-        for file in files:
-            ext =file.suffix.lower()
-            if ext in [".md", ".txt"]:
-                text = file.read_text(encoding="utf-8").strip()
-            elif ext == ".pdf":
-                reader = PdfReader((file))
-                text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
-            elif ext == ".docx":
-                doc = Document(file)
-                text = "\n".join(para.text.strip() for para in doc.paragraphs if para.text.strip())
-            else:
-                continue
+        print(f"Found {len(files)} files: {[file.name for file in files]}\n")
+        
+        # Process each file
+        for idx, file in enumerate(files, 1):
+            print(f"\nProcessing file {idx}/{len(files)}: {file.name}")
+            ext = file.suffix.lower()
 
-            if text:
+           # Extract document-level metadata
+            if ext == ".pdf":
+                doc_metadata = extract_pdf_metadata(file)
+            elif ext == ".docx":
+                doc_metadata = extract_docx_metadata(file)
+            else:
+                doc_metadata = {
+                    "title": file.stem,
+                    "author": "Unknown",
+                    "page_count": 1
+                }
+
+            # Add common metadata
+            doc_metadata.update({
+                "source": file.name,
+                "type": ext.replace(".", ""),
+                "path": str(file.resolve()),
+                "file_size": file.stat().st_size,
+                "last_modified": datetime.fromtimestamp(file.stat().st_mtime).isoformat()
+            })
+
+            # Extract text with page numbers
+            text_chunks = extract_text_with_page_numbers(file, ext)
+
+            # Creating a result entry for each page
+            for chunk in text_chunks:
                 results.append({
-                    "content": text,
+                    "content": chunk["content"],
                     "metadata": {
-                        "source": file.name,
-                        "type": ext.replace(".", ""),
-                        "path": str(file.resolve())
+                        **doc_metadata, # Document-level metaddata
+                        "page_number": chunk["page_number"],
+                        "section": chunk["section"]
                     }
                 })
-                
+        
+        print("\n" + "="*50)
+        print(f"Successfully loaded {len(results)} document chunks.")
+        print("="*50 + "\n")
+
         return results
+
     except Exception as e:
+        print(f"\nError loading documents: {e}")
+        traceback.print_exc()
         raise IOError(f"Error loading documents: {e}") from e
-    
+
 
 class QAAssistant:
     """
@@ -115,7 +269,6 @@ class QAAssistant:
         # Check for Groq API key
         if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
             model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
-            # print(f"Using Google Gemini model: {model_name}")
             return ChatGoogleGenerativeAI(
                 google_api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
                 model=model_name,
@@ -123,7 +276,6 @@ class QAAssistant:
             )
         elif os.getenv("GROQ_API_KEY"):
             model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-            # print(f"Using Groq model: {model_name}")
             return ChatGroq(
                 api_key=os.getenv("GROQ_API_KEY"),
                 model=model_name,
@@ -143,57 +295,34 @@ class QAAssistant:
         self.db.add_doc(documents)
 
 
-    def invoke(self, input: str, n_results: int = 3) -> str:
+    def invoke(self, input: str, n_results: int = 3) -> Dict[str, Any]:
         """
-        Query the QA assistant.
-
-        Args:
-            input: User's question
-            n_results: Number of relevant chunks to retrieve
+        Query with enhanced citations.
 
         Returns:
-            Dictionary containing answer and retrieved context
+            Dictionary containing answer and citations
         """
         # Retrieve the top relevant chunks from the vector DB
-        results = self.db.search(input, n_results)
+        results = self.db.search(input, n_results, use_reranking=True)
 
         # Combine the retrieved chunks into a single context string
         context = "\n\n".join(results.get("documents", []))
+        citations = results.get("citations", [])
 
         # Generate the answer using the LLM chain
         llm_answer = self.chain.invoke({"context": context, "question": input})
 
-        # return the answer and context
-        return llm_answer
+        # return the answer with citations
+        return {
+            "answer": llm_answer,
+            "citations": citations,
+            "sources": list(set([m.get("source") for m in results.get("metadatas", [])]))
+        }
     
 
 def main():
     """Main function to demonstrate the QA assistant."""
-    try:
-        # Initialize the QA assistant
-        # print("Initializing the QA Assistant...")
-        assistant = QAAssistant()
-
-        # Load sample documents
-        print("\nLoading documents...")
-        docs = load_publication()
-        print(f"Loaded {len(docs)} documents.")
-
-        assistant.add_doc(docs)
-
-        done = False
-
-        while not done:
-            question = input("\nEnter your question or ('x' or 'exit' to quit): ")
-            if question.lower() in ["x", "exit"]:
-                done = True
-                print("Exiting the QA assistant. Goodbye!")
-            else:
-                response = assistant.invoke(question, n_results=3)
-                print(f"\n{response}")
-    
-    except Exception as e:
-        print(f"Error running QA assistant: {e}")
+    pass
 
 if __name__ == "__main__":
     main()

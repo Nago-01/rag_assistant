@@ -1,12 +1,11 @@
-import os
-import chromadb
+import os, chromadb, traceback
 from typing import List, Dict, Any
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 class VectorDB:
     """
-    A simple vector database wrapper using ChromaDB with HuggingFace embeddings.
+    Vector database with enhanced citation tracking.
     """
     def __init__(self, collection_name: str = None, embedding_model: str = None):
         """
@@ -27,10 +26,12 @@ class VectorDB:
         self.client = chromadb.PersistentClient(path="./chroma_db")
 
         # Load embedding model
-        # print(f"Loading embedding model: {self.embedding_model_name}")
         self.embedding_model = SentenceTransformer(self.embedding_model_name)
 
-        # Get or create collection
+        # Initialize cross-encoder for re-ranking
+        self.reranker = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+        # Creating collection
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
             metadata={"description": "RAG document collection"},
@@ -39,37 +40,20 @@ class VectorDB:
         print(f"Vector database initialized with collection: {self.collection_name}")
 
     def chunk_text(self, text: str, chunk_size: int = 500) -> List[str]:
-        """
-        Simple text chunking by splitting on spaces and grouping into chunks.
-        
-        Args:
-            text: Input text to chunk
-            chunk_size: Approximate number of characters per chunk
-
-        Returns:
-            List of text chunks
-        """
-
-        chunks = []
-
-        # Splitting using LangChain's RecursiveCharacterTextSplitter
+        """Chunk text using RecursiveCharacterTextSplitter."""
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=200,
             length_function=len,
             separators=["\n\n", "\n", ". ", " ", ""])
         chunks = splitter.split_text(text)
-
         return chunks
+    
     
     def add_doc(self, documents: List) -> None:
         """
-        Add documents to the vector database.
-        
-        Args:
-            documents: List of documents
+        Add documents with enhanced metadata tracking.
         """
-        # print(f"Processing {len(documents)} documents...")
 
         for i, doc in enumerate(documents):
             text = doc.get("content", "")
@@ -78,8 +62,23 @@ class VectorDB:
             # Chunk the text
             chunks = self.chunk_text(text)
 
-            # Create unique IDs for each chunk
-            chunk_ids = [f"doc_{i}_chunk_{j}" for j in range(len(chunks))]
+            # Create unique IDs and enriched metadata for each chunk
+            chunk_ids = []
+            chunk_metadatas = []
+
+            for j, chunk in enumerate(chunks):
+                chunk_id = f"doc_{i}_page_{metadata.get('page_number', 0)}_chunk_{j}"
+                chunk_ids.append(chunk_id)
+
+                # Add chunk-specific metadata
+                chunk_metadata = metadata.copy()
+                chunk_metadata["chunk_index"] = j
+                chunk_metadata["total_chunks"] = len(chunks)
+                chunk_metadata["chunk_id"] = chunk_id
+
+                chunk_metadatas.append(chunk_metadata)
+
+
 
             # Generate embeddings for all chunks
             embeddings = self.embedding_model.encode(chunks)
@@ -87,40 +86,43 @@ class VectorDB:
             # Store in ChromaDB
             self.collection.add(
                 documents=chunks,
-                metadatas=[metadata for _ in chunks],
+                metadatas=chunk_metadatas,
                 embeddings = embeddings.tolist() if not isinstance(embeddings, list) else embeddings,
                 ids=chunk_ids
             )
-            # print(f"Added {len(chunks)} chunks from document {i+1}/{len(documents)}")
         
         print("All documents processed and added to the vector database.")
 
-    def search(self, query: str, n_results: int = 5) -> Dict[str, Any]:
+
+
+    def search(self, query: str, n_results: int = 5, use_reranking: bool = True) -> Dict[str, Any]:
         """
-        Search for documents similar to the query in the vector database.
+        Search with enhanced citation information and optional cross-encoder re-ranking.
 
-        Args:
+        Args: 
             query: Search query
-            n_results: Number of similar results to return
+            n_results: Number of results to return
+            use_reranking: Whether to apply cross-encoder
 
-        Returns:
-            Dictionary containing the search results with keys: "documents", "metadatas", "distances", "ids" 
+        Returns results with full metadata for citation tracking. 
         """
 
         try:
             # Encode the query to get its embedding
             query_embedding = self.embedding_model.encode([query])
 
+            # Retrieve more results for reranking if needed
+            initial_results = n_results * 3 if use_reranking else n_results
+
             # Perform similarity search in ChromaDB
             results = self.collection.query(
                 query_embeddings=query_embedding,
-                n_results=n_results,
+                n_results=initial_results,
             )
 
             # Handling empty results
             if not results:
-                print("No similar documents found.")
-                return {"documents": [], "metadatas": [], "distances": [], "ids": []}
+                return {"documents": [], "metadatas": [], "distances": [], "ids": [], "citations": []}
             
             # Unpack results
             documents = results.get("documents", [])[0]
@@ -128,15 +130,69 @@ class VectorDB:
             distances = results.get("distances", [])[0]
             ids = results.get("ids", [])[0]
 
+            # Re-rank using cross-encoder if enabled
+            if use_reranking and len(documents) > 0:
+                # Create query-document pairs
+                pairs = [[query, doc] for doc in documents]
+
+                # Get cross-encoder scores
+                rerank_scores = self.reranker.predict(pairs)
+
+                # Sorting by rerank scores
+                sorted_indices = sorted(
+                    range(len(rerank_scores)),
+                    key=lambda i: rerank_scores[i],
+                    reverse=True
+                )[:n_results]
+
+                # Reorder results based on reranking
+                documents = [documents[i] for i in sorted_indices]
+                metadatas = [metadatas[i] for i in sorted_indices]
+                distances = [rerank_scores[i] for i in sorted_indices]
+                ids = [ids[i] for i in sorted_indices]
+
+            # Create citations string for each result
+            citations = [self._format_citation(metadata) for metadata in metadatas]
 
             # Return structured dictionary
             return {
                 "documents": documents,
                 "metadatas": metadatas,
                 "distances": distances,
-                "ids": ids
+                "ids": ids,
+                "citations": citations
             }
         
         except Exception as e:
             print(f"Error during search: {e}")
-            return {"documents": [], "metadatas": [], "distances": [], "ids": []}
+            traceback.print_exc()
+            return {"documents": [], "metadatas": [], "distances": [], "ids": [], "citations": []}
+        
+
+    def _format_citation(self, metadata: Dict[str, Any]) -> str:
+        """
+        Format metadata into a citation string.
+        
+        Example: "Source: document.pdf, Page: 5, Author: John Doe, Section: Introduction
+        """
+        source = metadata.get("source", "Unknown Source")
+        page = metadata.get("page_number", "N/A")
+        author = metadata.get("author", "Unknown Author")
+        title = metadata.get("title", "Untitled")
+        section = metadata.get("section", "")
+
+        citation_parts = [f"Source: {source}"]
+
+        if page != "N/A":
+            citation_parts.append(f"Page: {page}")
+
+        if author and author != "Unknown Author":
+            citation_parts.append(f"Author: {author}")
+
+        if title and title != source:
+            citation_parts.append(f"Title: {title}")
+
+        if section:
+            citation_parts.append(f"Section: {section}")
+
+        return ", ".join(citation_parts)
