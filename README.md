@@ -39,7 +39,7 @@ graph TD
 
 
 ## Project Structure
-```
+```bash
 aloysia/
 ├── code/
 │   ├── app.py              # Core RAG assistant + agent initialization
