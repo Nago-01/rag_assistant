@@ -39,6 +39,7 @@ graph TD
 
 
 ## Project Structure
+```bash
 aloysia/
 ├── code/
 │   ├── app.py              # Core RAG assistant + agent initialization
@@ -53,6 +54,7 @@ aloysia/
 │   └── guidelines.md
 ├── chroma_db/              # Persistent vector store (auto-created)
 └── requirements.txt
+```
 
 ## Installation
 ### 1. Clone the repository
