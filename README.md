@@ -1,149 +1,172 @@
-# RAG Asistant - Hybrid RAG QA Assistant
-A RAG-based QA assistant that can read and understand contents of documents from local files (.pdf, .docx, .txt, .md).  It uses ChromaDB for vector storage, Sentence Transformers for text embeddings, and integrates LLMs from Groq or Google Gemini for reasoning and response generation. The assistant allows users to query their documents interactively, retrieving the most relevant context from stored knowledge before generating accurate and grounded answers.
+# Aloysia — Academic Research Agent with Agentic RAG
 
+**Aloysia** is a full-stack, agentic literature research assistant that goes beyond simple Q&A. It ingests academic documents, builds a **page-aware knowledge base**, and uses a **LangGraph-powered agent** to autonomously decide when to search internal documents, compare sources, generate literature reviews, export bibliographies, or fetch real-time web data — all with **publication-grade citations**.
 
+Built for researchers, clinicians, and students in health-tech and life sciences, Aloysia turns scattered PDFs and papers into structured, citable insights — automatically.
 
-## How it works: 
+---
 
-- The assistant loads and processes the provided local text documents (`.txt`, `.md`, `.pdf`, `.docx`)
+## What Aloysia Does
 
-- Each of the text documents are split into chunks with RecursiveCharacterTextSplitter.
+| Capability | Description |
+|----------|-----------|
+| **Document Ingestion** | Loads `.pdf`, `.docx`, `.txt`, `.md` with **rich metadata extraction** (title, author, creation date, page count) |
+| **Page-Level RAG** | Splits documents into chunks, embeds with `all-MiniLM-L6-v2`, stores **per-chunk metadata** (page, section, source) |
+| **Cross-Encoder Reranking** | Re-ranks retrieval results for higher relevance using `ms-marco-MiniLM-L-6-v2` |
+| **Agentic Reasoning** | LangGraph state machine decides tool use: RAG → Web → Compare → Export |
+| **8 Specialized Tools** | `rag_search`, `compare_documents`, `generate_bibliography`, `export_literature_review`, etc. |
+| **Multi-Format Export** | Generates **Word**, **LaTeX**, **Markdown** bibliographies and full **literature reviews** |
+| **Web Integration** | Tavily-powered real-time search for current guidelines, news, or updates |
+| **Citation Tracking** | Every claim includes: `Source: amr.pdf, Page: 5, Section: Mechanisms` |
 
-- Chunks are embedded using HuggingFace `all-MiniLM-L6-v2` and stored as vectors in ChromaDB for fast semantic retrieval.
+---
 
-- Integrates multiple LLM providers (Groq or Gemini)
+## How It Works (Agentic Workflow)
 
--  Uses a prompt chain with context-aware responses
-
-These yield answers that are intended to be grounded in the provided documents.
-
-
-
-## Prerequisites:
-- [Python](https://www.python.org/) 3.9+ recommended (adjust for your environment).
-
-- git - if you will choose to publish to Github.
-
-- A Groq or Gemini API key. If you use ChatGroq LLM: set GROQ_API_KEY in env or `.env`.
-
-- You will also need the Python packages used in the code (see Installation)
-
-
-
-## Structure:
-```
-rag_assistant/
-└───code/
-│   ├─ app.py              # Main RAG assistant logic
-│   ├─ db.py               # Vector database wrapper (Chroma + SentenceTransformer)
-│   ├─ .env                # Environment variables (API keys, model configs)
-│   ├─ __init__.py
-└───data/                    # Folder containing input documents
-    ├─ publication.md                # your provided markdown publication
-    ├─ publication.pdf               # your provided pdf publication
-    └─ publication.txt               # your provided text publication
-
+```mermaid
+graph TD
+    A[User Query] --> B{Agent Decides}
+    B -->|Factual from docs| C[rag_search]
+    B -->|Compare two papers| D[compare_documents]
+    B -->|List sources| E[generate_bibliography]
+    B -->|Write review| F[generate_literature_review]
+    B -->|Export| G[export_*]
+    B -->|Real-time info| H[web_search]
+    B -->|Math| I[calculator]
+    C & D & E & F & G & H & I --> J[LLM Synthesizes Answer]
+    J --> K[Final Response with Citations]
 ```
 
+
+## Project Structure
+aloysia/
+├── code/
+│   ├── app.py              # Core RAG assistant + agent initialization
+│   ├── db.py               # VectorDB with Chroma, embeddings, reranking
+│   ├── export_utils.py     # Bibliography & literature review exporters
+│   ├── agent.py            # LangGraph agent, tools, workflow
+│   ├── __init__.py
+│   └── .env                # API keys & config
+├── data/                   # Drop your PDFs, DOCX, etc. here
+│   ├── amr.pdf
+│   ├── dysmenorrhea.docx
+│   └── guidelines.md
+├── chroma_db/              # Persistent vector store (auto-created)
+└── requirements.txt
 
 ## Installation
-
-
-### Clone the repository
-```
+### 1. Clone the repository
+```bash
 git clone https://github.com/Nago-01/rag_assistant.git
 cd rag_assistant
 ```
 
-
-
-### Create & activate a virtual environment
-
-Open a terminal and cd to the `rag_assistant/` folder (the one that contains the code/ directory)
-
-Unix / macOS
-```
+### 2. Create virtual environment
+```bash
+# Unix/macOS
 python -m venv .venv
 source .venv/bin/activate
-```
-Windows PowerShell
-```
+
+# Windows
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
 
-
-### Install dependencies
-
-```
+### 3. Install dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-
-
-### Set up your .env file
-Create a `.env` file in the project root directory and add your API keys:
+### Set Up `.env`
 ```
+# LLM Providers (one required)
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=llama-3.3-70b-versatile
 
-# Groq API (preferred)
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.1-8b-instant
+# OR
+GEMINI_API_KEY=your_gemini_key
+GEMINI_MODEL=gemini-2.0-flash-exp
 
-# or Google Gemini API (fallback)
-GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-2.0-flash
+# Optional: Real-time web search
+TAVILY_API_KEY=your_tavily_key
 
-# Embedding & Chroma config
+# Embedding & DB
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 CHROMA_COLLECTION_NAME=rag_documents
 ```
 
-If you get import errors, please ensure you installed the packages that provide those subpackages or check the package names and versions you used.
-
-
-
-### Adding Documents
-Place your documents in the data/ folder (supported formats: `.txt`, `.md`, `.pdf`, `.docx`).
-
-Example:
+## Usage
+### Add Documents
+Place your research papers in the `data/` folder
 ```
 data/
-├── publication.pdf
-├── publication.docx
-└── publication.txt
+├── antimicrobial_resistance.pdf
+├── pcos_clinical_guidelines.docx
+└── who_amr_report_2025.md
 ```
 
-
-### Running the Assistant
-After setup, run as a module:
-```
-python -m code.app
+### Run Aloysia
+```bash
+python -m code.agent
 ```
 
-Example Session:
+### Example Session
 ```
-Initializing the QA Assistant...
-Using Groq model: llama-3.1-8b-instant
-QA Assistant Initialized successfully
+Agentic RAG Assistant with LangGraph
+Initializing agent...
+Loaded 3 documents into knowledge base.
 
-Loading documents...
-Loaded 3 documents.
-Processing 3 documents...
-Added 42 chunks from document 1/3
-Added 31 chunks from document 2/3
-Added 5 chunks from document 3/3
-All documents processed and added to the vector database.
+You: Compare AMR and PCOS papers on treatment options
+Assistant: 
+COMPARISON: antimicrobial_resistance.pdf vs pcos_clinical_guidelines.docx on 'treatment'
 
-Enter your question or ('x' or 'exit' to quit): What is the main finding in the research paper?
-→ The study concludes that ...
+AMR.pdf:
+1. Source: antimicrobial_resistance.pdf, Page: 12, Author: WHO
+   "Antibiotic stewardship programs reduced resistance by 23%..."
+
+PCOS.docx:
+1. Source: pcos_clinical_guidelines.docx, Page: 8, Author: AES
+   "Metformin and lifestyle intervention improved ovulation in 68%..."
+
+You: Write a literature review on antimicrobial resistance and export as Word
+Assistant: Literature review exported to WORD: literature_review_antimicrobial_resistance.docx
+
+You: What’s the latest WHO stance on AMR?
+Assistant: [Uses web_search] According to WHO (Nov 2025): "Global AMR deaths projected to reach 10M by 2050..."
 ```
 
+### Tools and Commands (Natural Language)
+Ask This,Aloysia Does This
+"""What does the AMR paper say on page 5?""",rag_search with citation
+"""Compare AMR and Dysmenorrhea on causes""",compare_documents
+"""Show bibliography""",generate_bibliography
+"""Export references as LaTeX""","export_bibliography(format=""latex"")"
+"""Write a review on PCOS""",generate_literature_review + synthesis
+"""Save review as Markdown""","export_literature_review(format=""md"")"
+"""Calculate 68% of 250 patients""",calculator
+
+
+### Tech Stack
+Layer,Tool
+LLM,Groq (llama-3.3-70b) or Gemini (2.0-flash)
+Embeddings,all-MiniLM-L6-v2
+Reranking,ms-marco-MiniLM-L-6-v2
+Vector DB,ChromaDB (persistent)
+Agent Framework,LangGraph
+Document Parsing,"PyPDF2, python-docx"
+Export,"python-docx, LaTeX, Markdown"
+Web Search,Tavily
+CLI,Built-in interactive loop
+
+## For Health-Tech and Research
+- Clinical trial document analysis
+- Guideline compliance checking
+- Pharmacovigilance reporting
+- Medical education content generation
+- Real-time drug policy updates
 
 
 ## License
 MIT
-
-
-
 
