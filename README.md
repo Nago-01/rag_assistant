@@ -39,6 +39,7 @@ graph TD
 
 
 ## Project Structure
+```
 aloysia/
 ├── code/
 │   ├── app.py              # Core RAG assistant + agent initialization
@@ -53,6 +54,7 @@ aloysia/
 │   └── guidelines.md
 ├── chroma_db/              # Persistent vector store (auto-created)
 └── requirements.txt
+```
 
 ## Installation
 ### 1. Clone the repository
@@ -137,27 +139,33 @@ Assistant: [Uses web_search] According to WHO (Nov 2025): "Global AMR deaths pro
 ```
 
 ### Tools and Commands (Natural Language)
-Ask This,Aloysia Does This
-"""What does the AMR paper say on page 5?""",rag_search with citation
-"""Compare AMR and Dysmenorrhea on causes""",compare_documents
-"""Show bibliography""",generate_bibliography
-"""Export references as LaTeX""","export_bibliography(format=""latex"")"
-"""Write a review on PCOS""",generate_literature_review + synthesis
-"""Save review as Markdown""","export_literature_review(format=""md"")"
-"""Calculate 68% of 250 patients""",calculator
+
+| Ask This | Aloysia Does This |
+|----------|-------------------|
+| `"What does the AMR paper say on page 5?"` | `rag_search` with citation |
+| `"Compare AMR and Dysmenorrhea on causes"` | `compare_documents` |
+| `"Show bibliography"` | `generate_bibliography` |
+| `"Export references as LaTeX"` | `export_bibliography(format="latex")` |
+| `"Write a review on PCOS"` | `generate_literature_review` + synthesis |
+| `"Save review as Markdown"` | `export_literature_review(format="md")` |
+| `"Calculate 68% of 250 patients"` | `calculator` |
 
 
 ### Tech Stack
-Layer,Tool
-LLM,Groq (llama-3.3-70b) or Gemini (2.0-flash)
-Embeddings,all-MiniLM-L6-v2
-Reranking,ms-marco-MiniLM-L-6-v2
-Vector DB,ChromaDB (persistent)
-Agent Framework,LangGraph
-Document Parsing,"PyPDF2, python-docx"
-Export,"python-docx, LaTeX, Markdown"
-Web Search,Tavily
-CLI,Built-in interactive loop
+
+| Layer | Tool |
+|-------|------|
+| **LLM** | Groq (`llama-3.3-70b`) or Gemini (`2.0-flash`) |
+| **Embeddings** | `all-MiniLM-L6-v2` |
+| **Reranking** | `ms-marco-MiniLM-L-6-v2` |
+| **Vector DB** | ChromaDB (persistent) |
+| **Agent Framework** | LangGraph |
+| **Document Parsing** | PyPDF2, python-docx |
+| **Export** | python-docx, LaTeX, Markdown |
+| **Web Search** | Tavily |
+| **CLI** | Built-in interactive loop |
+
+
 
 ## For Health-Tech and Research
 - Clinical trial document analysis
